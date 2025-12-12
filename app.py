@@ -3,25 +3,30 @@ import pandas as pd
 import plotly.express as px
 
 # --- CONFIGURAÇÃO ---
-st.set_page_config(page_title="Fiscal Command", layout="wide", page_icon="🚀")
+st.set_page_config(page_title="Fiscal Tracker", layout="wide", page_icon="📊")
 
-# --- FUNÇÃO: DADOS INICIAIS ---
+# --- FUNÇÃO: GERAR DADOS COM NUMERAÇÃO (00, 01, 02...) ---
 def get_initial_data():
-    structure = {
-        "Direito Tributário": ["Sistema Tributário Nacional", "Competência Tributária", "Limitações ao Poder de Tributar", "Impostos em Espécie", "Obrigação Tributária", "Crédito Tributário", "Suspensão/Extinção/Exclusão", "Administração Tributária"],
-        "Direito Constitucional": ["Direitos Fundamentais", "Nacionalidade/Políticos", "Org. do Estado", "Adm. Pública (37-41)", "Poder Legislativo", "Poder Executivo", "Poder Judiciário", "Funções Essenciais"],
-        "Direito Administrativo": ["Regime Jurídico Adm.", "Org. Administrativa", "Atos Administrativos", "Poderes", "Lei 8.112/90", "Licitações (14.133)", "Serviços Públicos", "Resp. Civil do Estado"],
-        "RLM": ["Lógica Proposicional", "Tautologia/Contradição", "Equivalências", "Argumentação", "Conjuntos", "Combinatória", "Probabilidade", "Mat. Financeira"],
-        "Direito Civil": ["LINDB", "Pessoas", "Domicílio", "Bens", "Fatos Jurídicos", "Prescrição/Decadência", "Obrigações", "Contratos"],
-        "Contabilidade Geral": ["Conceitos/Patrimônio", "Escrituração", "DRE", "Balanço Patrimonial", "CPC 00", "Estoque (CPC 16)", "Imobilizado (CPC 27)", "Depreciação"],
-        "TI": ["Dados/Info/Conhecimento", "Banco de Dados Relacional", "SQL", "Big Data", "Segurança da Info", "Governança (ITIL/COBIT)", "Ciclo de Software", "Python/R Análise"]
+    # Configuração dos limites de cada matéria
+    limits = {
+        "Contabilidade Geral": 32,
+        "Direito Administrativo": 16,
+        "Direito Civil": 15,
+        "Direito Constitucional": 21,
+        "Direito Tributário": 22,
+        "RLM": 33,
+        "Tecnologia da Informação": 17
     }
+    
     rows = []
-    for materia, topicos in structure.items():
-        for topico in topicos:
+    for materia, max_num in limits.items():
+        # Gera de 0 até o número limite (inclusive)
+        for i in range(max_num + 1):
+            # Formata como "Aula 00", "Aula 01" (sempre 2 dígitos)
+            nome_topico = f"Aula {i:02d}"
             rows.append({
                 "Disciplina": materia,
-                "Tópico": topico,
+                "Tópico": nome_topico,
                 "PDF Fechado": False,
                 "Revisões": 0,
             })
@@ -33,7 +38,7 @@ if "df_memory" not in st.session_state:
 
 # --- BARRA LATERAL ---
 st.sidebar.header("📂 Arquivos")
-uploaded_file = st.sidebar.file_uploader("Carregar CSV Antigo", type="csv")
+uploaded_file = st.sidebar.file_uploader("Carregar CSV", type="csv")
 
 if uploaded_file is not None:
     try:
@@ -48,36 +53,12 @@ if uploaded_file is not None:
         st.error("Arquivo inválido.")
 
 st.sidebar.markdown("---")
-st.sidebar.header("➕ Adicionar Conteúdo")
-
-with st.sidebar.expander("Novo Tópico ou Matéria"):
-    tipo_add = st.radio("Tipo:", ["Tópico em Matéria Existente", "Nova Matéria Completa"])
-    disciplinas_atuais = sorted(st.session_state["df_memory"]["Disciplina"].unique())
-    
-    disciplina_input = ""
-    if tipo_add == "Tópico em Matéria Existente":
-        disciplina_input = st.selectbox("Selecione:", disciplinas_atuais)
-    else:
-        disciplina_input = st.text_input("Nome da Nova Matéria")
-    
-    topico_input = st.text_input("Nome do Tópico")
-    
-    if st.button("Adicionar"):
-        if disciplina_input and topico_input:
-            novo_dado = pd.DataFrame([{
-                "Disciplina": disciplina_input,
-                "Tópico": topico_input,
-                "PDF Fechado": False,
-                "Revisões": 0
-            }])
-            st.session_state["df_memory"] = pd.concat([st.session_state["df_memory"], novo_dado], ignore_index=True)
-            st.success(f"Adicionado: {topico_input}")
-            st.rerun()
+st.sidebar.info("Para adicionar matérias extras, edite o código ou use a versão anterior. Esta versão foca na numeração fixa.")
 
 df = st.session_state["df_memory"]
 
 # --- CABEÇALHO ---
-st.title("🚀 Painel de Controle - Auditor Fiscal")
+st.title("📊 Painel Auditor Fiscal")
 
 pdfs_concluidos = df["PDF Fechado"].sum()
 total_pdfs = len(df)
@@ -89,76 +70,88 @@ c1.metric("PDFs Fechados", f"{pdfs_concluidos}/{total_pdfs}", border=True)
 c2.metric("Progresso Total", f"{progresso:.1f}%", border=True)
 c3.metric("Total Revisões", f"{total_revisoes}", border=True)
 
-# --- ÁREA DE GRÁFICOS POR DISCIPLINA (NOVA LÓGICA) ---
+# --- ÁREA DE ANÁLISE (PIZZA + REVISÕES) ---
 st.markdown("---")
-st.subheader("📊 Análise Detalhada por Disciplina")
+st.subheader("🔎 Análise por Disciplina")
 
 if not df.empty:
     lista_disciplinas = sorted(df["Disciplina"].unique())
-    # O usuário escolhe UMA disciplina para focar os gráficos
-    materia_foco = st.selectbox("Selecione a Disciplina para visualizar os gráficos:", lista_disciplinas)
     
-    # Filtra os dados apenas dessa disciplina
+    # 1. Seletor de Matéria
+    materia_foco = st.selectbox("Selecione a Disciplina para ver o gráfico:", lista_disciplinas)
+    
+    # Filtra dados
     df_foco = df[df["Disciplina"] == materia_foco].copy()
     
-    # Cria duas colunas para os gráficos
     col_g1, col_g2 = st.columns(2)
     
+    # --- GRÁFICO 1: PIZZA (DONUT) DE PROGRESSO ---
     with col_g1:
-        st.markdown(f"**🔭 Situação dos Tópicos: {materia_foco}**")
-        # Gráfico de barras horizontais: Tópico vs Status
-        # Usamos trick do Plotly: x=1 para todas as barras terem mesmo tamanho, cor define status
-        fig_prog = px.bar(
-            df_foco, 
-            y="Tópico", 
-            x=[1]*len(df_foco), 
-            color="PDF Fechado",
-            orientation='h',
-            color_discrete_map={True: '#00CC96', False: '#EF553B'}, # Verde e Vermelho
-            text="PDF Fechado", # Mostra True/False (ou podemos customizar)
-            category_orders={"Tópico": sorted(df_foco["Tópico"].tolist())} # Ordena alfabeticamente ou manter ordem
+        st.markdown(f"**🔭 Progresso: {materia_foco}**")
+        
+        # Prepara dados para o gráfico de pizza
+        concluido = df_foco["PDF Fechado"].sum()
+        pendente = len(df_foco) - concluido
+        dados_pizza = pd.DataFrame({
+            "Status": ["Concluído", "Pendente"],
+            "Quantidade": [concluido, pendente]
+        })
+        
+        # Cria o gráfico Donut (Pizza com furo)
+        fig_pizza = px.pie(
+            dados_pizza, 
+            values="Quantidade", 
+            names="Status",
+            hole=0.6, # Faz o furo no meio (Donut)
+            color="Status",
+            color_discrete_map={"Concluído": "#00CC96", "Pendente": "#EF553B"}
         )
-        # Limpeza visual do gráfico
-        fig_prog.update_traces(texttemplate="%{y}", textposition="inside", insidetextanchor="start")
-        fig_prog.update_yaxes(visible=False, showticklabels=False) # Esconde eixo Y pois o texto já está na barra
-        fig_prog.update_xaxes(visible=False)
-        fig_prog.update_layout(
-            showlegend=True, 
-            legend_title="PDF Finalizado?",
-            margin=dict(t=0, l=0, r=0, b=0), 
-            height=max(400, len(df_foco) * 25) # Altura dinâmica baseada no número de tópicos
-        )
-        st.plotly_chart(fig_prog, use_container_width=True)
-        st.caption("Verde = Concluído | Vermelho = Pendente")
+        
+        # Deixa bonitão
+        fig_pizza.update_traces(textinfo='percent+label')
+        fig_pizza.update_layout(showlegend=False, margin=dict(t=0, b=0, l=0, r=0), height=300)
+        
+        # Coloca o número total no meio do buraco
+        fig_pizza.add_annotation(text=f"{int((concluido/len(df_foco))*100)}%", x=0.5, y=0.5, font_size=20, showarrow=False)
+        
+        st.plotly_chart(fig_pizza, use_container_width=True)
 
+    # --- GRÁFICO 2: BARRAS DE REVISÃO ---
     with col_g2:
-        st.markdown(f"**🔄 Quantidade de Revisões por Assunto**")
-        # Gráfico de barras: Quantas revisões em CADA tópico
+        st.markdown(f"**🔄 Revisões por Aula**")
+        
         fig_rev = px.bar(
             df_foco,
-            y="Tópico",
+            y="Tópico", # Aula 00, Aula 01...
             x="Revisões",
             orientation='h',
             text_auto=True,
             color="Revisões",
             color_continuous_scale="Blues"
         )
+        # Ajusta altura dinamicamente para caber todas as aulas sem espremer
+        altura_dinamica = max(350, len(df_foco) * 25)
+        
         fig_rev.update_layout(
             yaxis_title=None,
-            xaxis_title="Nº de Revisões",
+            xaxis_title="Qtd Revisões",
             margin=dict(t=0, l=0, r=0, b=0),
-            height=max(400, len(df_foco) * 25) # Mesma altura dinâmica
+            height=altura_dinamica
         )
+        # Inverte eixo Y para Aula 00 ficar em cima
+        fig_rev['layout']['yaxis']['autorange'] = "reversed"
+        
         st.plotly_chart(fig_rev, use_container_width=True)
 
-# --- ÁREA DE EDIÇÃO ---
+# --- ÁREA DE EDIÇÃO (FORMULÁRIO) ---
 st.markdown("---")
-st.subheader("📝 Atualizar e Estudar")
+st.subheader("📝 Marcar Aulas")
 
-filtro = st.selectbox("Filtrar Tabela para Edição:", ["TODAS"] + lista_disciplinas)
+# Usa a mesma seleção de cima ou permite mudar
+filtro_tabela = st.selectbox("Filtrar Tabela:", ["IGUAL AO GRÁFICO", "TODAS"])
 
-if filtro != "TODAS":
-    df_show = df[df["Disciplina"] == filtro].reset_index(drop=True)
+if filtro_tabela == "IGUAL AO GRÁFICO":
+    df_show = df[df["Disciplina"] == materia_foco].reset_index(drop=True)
 else:
     df_show = df.reset_index(drop=True)
 
@@ -169,11 +162,7 @@ with st.form("my_form"):
             "Disciplina": st.column_config.TextColumn(disabled=True),
             "Tópico": st.column_config.TextColumn(disabled=True),
             "PDF Fechado": st.column_config.CheckboxColumn("PDF OK?", width="small"),
-            "Revisões": st.column_config.NumberColumn(
-                "Nº Rev.", 
-                step=1, 
-                min_value=0, 
-            )
+            "Revisões": st.column_config.NumberColumn("Nº Rev.", step=1, min_value=0)
         },
         hide_index=True, 
         use_container_width=True, 
@@ -183,11 +172,12 @@ with st.form("my_form"):
     submitted = st.form_submit_button("✅ Confirmar Alterações", type="primary")
 
     if submitted:
-        if filtro == "TODAS":
+        if filtro_tabela == "TODAS":
             st.session_state["df_memory"] = edited_df
         else:
+            # Atualiza apenas a matéria filtrada no dataframe principal
             df_full = st.session_state["df_memory"]
-            df_others = df_full[df_full["Disciplina"] != filtro]
+            df_others = df_full[df_full["Disciplina"] != materia_foco]
             st.session_state["df_memory"] = pd.concat([df_others, edited_df], ignore_index=True)
         st.rerun()
 
@@ -196,9 +186,9 @@ st.markdown("---")
 csv = st.session_state["df_memory"].to_csv(index=False).encode('utf-8')
 
 st.download_button(
-    label="💾 BAIXAR ARQUIVO PARA SALVAR",
+    label="💾 BAIXAR ARQUIVO (Salvar)",
     data=csv,
-    file_name='meu_progresso_fiscal.csv',
+    file_name='progresso_auditor.csv',
     mime='text/csv',
     type="secondary",
     use_container_width=True
