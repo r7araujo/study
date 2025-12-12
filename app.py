@@ -5,21 +5,18 @@ import plotly.express as px
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Fiscal Tracker", layout="wide", page_icon="📊")
 
-
-
-# --- CONFIGURAÇÃO DA ROTINA (EDITE AQUI SE PRECISAR MUDAR) ---
-# Basta adicionar ou remover itens dentro das aspas.
+# --- SUA ROTINA (EDITE AQUI) ---
 ROTINA_SEMANAL = {
     "Segunda": ["Contabilidade Geral", "TI"],
     "Terça":   ["Direito Tributário"],
     "Quarta":  ["Direito Adm."],
     "Quinta":  ["Direito Civil"],
     "Sexta":   ["RLM"],
-    "Sábado":  ["Revisão / Pendências"], # Deixei sugerido, se quiser vazio apague o texto
-    "Domingo": ["Descanso"]              # Deixei sugerido
+    "Sábado":  ["Revisão / Pendências"], 
+    "Domingo": ["Descanso"]              
 }
 
-# --- FUNÇÃO: DADOS INICIAIS (AULA 00 a XX) ---
+# --- FUNÇÃO: DADOS INICIAIS ---
 def get_initial_data():
     limits = {
         "Contabilidade Geral": 32,
@@ -42,12 +39,18 @@ def get_initial_data():
             })
     return pd.DataFrame(rows)
 
-# --- MEMÓRIA (SESSION STATE) ---
+# --- MEMÓRIA ---
 if "df_memory" not in st.session_state:
     st.session_state["df_memory"] = get_initial_data()
 
-# --- BARRA LATERAL ---
-st.sidebar.header("📂 Gerenciamento")
+# ==============================================================================
+# BARRA LATERAL (NAVEGAÇÃO E ARQUIVOS)
+# ==============================================================================
+st.sidebar.header("🧭 Navegação")
+pagina = st.sidebar.radio("Ir para:", ["📊 Painel de Estudos", "📅 Rotina Semanal"])
+
+st.sidebar.markdown("---")
+st.sidebar.header("📂 Arquivos")
 uploaded_file = st.sidebar.file_uploader("Carregar CSV Salvo", type="csv")
 
 if uploaded_file is not None:
@@ -69,16 +72,12 @@ if st.sidebar.button("⚠️ RESETAR BANCO DE DADOS", type="primary"):
 
 df = st.session_state["df_memory"]
 
-# --- TÍTULO PRINCIPAL ---
-st.title("⚖️ Auditor Fiscal - Painel de Controle")
-
-# --- ABAS DE NAVEGAÇÃO ---
-tab1, tab2 = st.tabs(["📊 Painel de Estudos", "📅 Minha Rotina Semanal"])
-
 # ==============================================================================
-# ABA 1: PAINEL DE ESTUDOS (Tudo o que já existia)
+# PÁGINA 1: PAINEL DE ESTUDOS (DASHBOARD)
 # ==============================================================================
-with tab1:
+if pagina == "📊 Painel de Estudos":
+    st.title("⚖️ Painel de Controle")
+
     # KPIs
     pdfs_concluidos = df["PDF Fechado"].sum()
     total_pdfs = len(df)
@@ -90,20 +89,18 @@ with tab1:
     c2.metric("Progresso Total", f"{progresso:.1f}%", border=True)
     c3.metric("Total Revisões", f"{total_revisoes}", border=True)
 
-    # GRÁFICO GERAL DE REVISÕES
+    # GRÁFICO GERAL
     st.markdown("---")
-    st.subheader("🏆 Comparativo Geral de Revisões")
+    st.subheader("🏆 Comparativo de Revisões")
     if not df.empty:
         df_geral = df.groupby("Disciplina")["Revisões"].sum().reset_index().sort_values("Revisões", ascending=False)
-        fig_geral = px.bar(
-            df_geral, x="Disciplina", y="Revisões", color="Disciplina", text="Revisões",
-        )
+        fig_geral = px.bar(df_geral, x="Disciplina", y="Revisões", color="Disciplina", text="Revisões")
         fig_geral.update_layout(height=350, showlegend=False)
         st.plotly_chart(fig_geral, use_container_width=True)
 
     # VISÃO DETALHADA
     st.markdown("---")
-    st.subheader("🔎 Visão Detalhada por Disciplina")
+    st.subheader("🔎 Visão por Disciplina")
     if not df.empty:
         lista_disciplinas = sorted(df["Disciplina"].unique())
         materia_foco = st.selectbox("Selecione a Disciplina:", lista_disciplinas)
@@ -163,13 +160,12 @@ with tab1:
     st.download_button("💾 BAIXAR ARQUIVO (Salvar Progresso)", data=csv, file_name='progresso_auditor.csv', mime='text/csv', type="secondary", use_container_width=True)
 
 # ==============================================================================
-# ABA 2: MINHA ROTINA (Novo Recurso)
+# PÁGINA 2: ROTINA SEMANAL
 # ==============================================================================
-with tab2:
-    st.header("📅 Rotina Semanal Fixa")
-    st.caption("Para alterar essa rotina, edite a lista 'ROTINA_SEMANAL' no topo do código.")
+elif pagina == "📅 Rotina Semanal":
+    st.title("📅 Minha Rotina Fixa")
+    st.caption("Foco e disciplina constante.")
     
-    # CSS para deixar a tabela bonita (Estilo Clean/Card)
     st.markdown("""
     <style>
         .rotina-container {
@@ -177,21 +173,22 @@ with tab2:
             flex-wrap: wrap;
             gap: 15px;
             justify_content: center;
+            margin-top: 20px;
         }
         .dia-card {
-            background-color: #262730; /* Fundo escuro do card */
+            background-color: #262730;
             border: 1px solid #41444b;
             border-radius: 10px;
-            width: 130px; /* Largura fixa para ficarem alinhados */
+            width: 140px;
             padding: 15px;
             text-align: center;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
         }
         .dia-titulo {
-            color: #ff4b4b; /* Cor destaque */
+            color: #ff4b4b;
             font-weight: bold;
-            font-size: 1.1em;
-            margin-bottom: 10px;
+            font-size: 1.2em;
+            margin-bottom: 12px;
             text-transform: uppercase;
             border-bottom: 2px solid #ff4b4b;
             padding-bottom: 5px;
@@ -199,17 +196,16 @@ with tab2:
         .materia-item {
             background-color: #0e1117;
             color: white;
-            padding: 5px;
-            margin: 5px 0;
-            border-radius: 5px;
-            font-size: 0.9em;
+            padding: 8px;
+            margin: 6px 0;
+            border-radius: 6px;
+            font-size: 0.95em;
+            border: 1px solid #333;
         }
     </style>
     """, unsafe_allow_html=True)
 
-    # Gera o HTML dos cartões baseado na sua lista
     html_cards = '<div class="rotina-container">'
-    
     dias_ordem = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
     
     for dia in dias_ordem:
