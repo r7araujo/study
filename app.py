@@ -31,43 +31,41 @@ def get_initial_data():
 if "df_memory" not in st.session_state:
     st.session_state["df_memory"] = get_initial_data()
 
-# --- BARRA LATERAL (ARQUIVOS + ADICIONAR MATÉRIA) ---
+# --- BARRA LATERAL ---
 st.sidebar.header("📂 Arquivos")
-uploaded_file = st.sidebar.file_uploader("Carregar progresso (CSV)", type="csv")
+uploaded_file = st.sidebar.file_uploader("Carregar CSV Antigo", type="csv")
 
 if uploaded_file is not None:
     try:
-        # Se carregou arquivo, lê ele
-        df = pd.read_csv(uploaded_file)
-        # Garante tipos
-        df["PDF Fechado"] = df["PDF Fechado"].astype(bool)
-        df["Revisões"] = df["Revisões"].fillna(0).astype(int)
-        # Atualiza a memória se o arquivo for novo
-        if not df.equals(st.session_state["df_memory"]):
-            st.session_state["df_memory"] = df
+        df_temp = pd.read_csv(uploaded_file)
+        df_temp["PDF Fechado"] = df_temp["PDF Fechado"].astype(bool)
+        df_temp["Revisões"] = df_temp["Revisões"].fillna(0).astype(int)
+        
+        # Só atualiza se for diferente (evita loop)
+        if not df_temp.equals(st.session_state["df_memory"]):
+            st.session_state["df_memory"] = df_temp
+            st.rerun()
     except:
-        st.error("Erro no arquivo.")
-        df = st.session_state["df_memory"]
-else:
-    # Se não tem arquivo, usa a memória atual
-    df = st.session_state["df_memory"]
+        st.error("Arquivo inválido.")
 
 st.sidebar.markdown("---")
 st.sidebar.header("➕ Adicionar Conteúdo")
 
-# Menu de Adição
-with st.sidebar.expander("Criar Novo Tópico/Matéria"):
-    tipo_add = st.radio("O que adicionar?", ["Em Matéria Existente", "Nova Matéria Completa"])
+with st.sidebar.expander("Novo Tópico ou Matéria"):
+    tipo_add = st.radio("Tipo:", ["Tópico em Matéria Existente", "Nova Matéria Completa"])
+    
+    # Pega lista atualizada de disciplinas
+    disciplinas_atuais = st.session_state["df_memory"]["Disciplina"].unique()
     
     disciplina_input = ""
-    if tipo_add == "Em Matéria Existente":
-        disciplina_input = st.selectbox("Escolha a Matéria:", df["Disciplina"].unique())
+    if tipo_add == "Tópico em Matéria Existente":
+        disciplina_input = st.selectbox("Selecione:", disciplinas_atuais)
     else:
-        disciplina_input = st.text_input("Nome da Nova Matéria (ex: Direito Penal)")
+        disciplina_input = st.text_input("Nome da Nova Matéria")
     
-    topico_input = st.text_input("Nome do Tópico (ex: Crimes contra a Vida)")
+    topico_input = st.text_input("Nome do Tópico")
     
-    if st.button("Adicionar ao Edital"):
+    if st.button("Adicionar"):
         if disciplina_input and topico_input:
             novo_dado = pd.DataFrame([{
                 "Disciplina": disciplina_input,
@@ -75,89 +73,97 @@ with st.sidebar.expander("Criar Novo Tópico/Matéria"):
                 "PDF Fechado": False,
                 "Revisões": 0
             }])
-            # Adiciona ao DataFrame principal
             st.session_state["df_memory"] = pd.concat([st.session_state["df_memory"], novo_dado], ignore_index=True)
-            st.success(f"✅ Adicionado: {topico_input}")
-            st.rerun() # Recarrega para aparecer na tela
-        else:
-            st.warning("Preencha todos os campos!")
+            st.success(f"Adicionado: {topico_input}")
+            st.rerun()
 
-# Atualiza df com o que está na memória (incluindo adições recentes)
+# Pega o DF da memória para exibir
 df = st.session_state["df_memory"]
 
 # --- CABEÇALHO ---
-st.title("🚀 Painel de Controle")
+st.title("🚀 Painel de Controle - Auditor Fiscal")
 
 # --- KPIs ---
 pdfs_concluidos = df["PDF Fechado"].sum()
 total_pdfs = len(df)
 total_revisoes = df["Revisões"].sum()
-progresso_geral = (pdfs_concluidos / total_pdfs) * 100 if total_pdfs > 0 else 0
+progresso = (pdfs_concluidos / total_pdfs) * 100 if total_pdfs > 0 else 0
 
 c1, c2, c3 = st.columns(3)
 c1.metric("PDFs Fechados", f"{pdfs_concluidos}/{total_pdfs}", border=True)
-c2.metric("Progresso Global", f"{progresso_geral:.1f}%", border=True)
-c3.metric("Total Revisões", f"{total_revisoes} 🔄", border=True)
+c2.metric("Progresso Total", f"{progresso:.1f}%", border=True)
+c3.metric("Total Revisões", f"{total_revisoes}", border=True)
 
 # --- GRÁFICO ---
 if not df.empty:
-    st.subheader("🔭 Radar de Edital")
-    fig = px.sunburst(
-        df, path=['Disciplina', 'Tópico'], values=[1]*len(df),
-        color='PDF Fechado', color_discrete_map={True: '#00CC96', False: '#EF553B'},
-        title="Vermelho = Pendente | Verde = Concluído"
-    )
-    fig.update_layout(height=450, margin=dict(t=30, l=0, r=0, b=0))
-    st.plotly_chart(fig, use_container_width=True)
+    with st.expander("Ver Gráfico de Radar (Sunburst)", expanded=True):
+        fig = px.sunburst(
+            df, path=['Disciplina', 'Tópico'], values=[1]*len(df),
+            color='PDF Fechado', color_discrete_map={True: '#00CC96', False: '#EF553B'},
+            title="Vermelho = Pendente | Verde = Concluído"
+        )
+        fig.update_layout(height=400, margin=dict(t=30, l=0, r=0, b=0))
+        st.plotly_chart(fig, use_container_width=True)
 
-# --- ÁREA DE EDIÇÃO ---
+# --- ÁREA DE EDIÇÃO (FORMULÁRIO PARA EVITAR RELOAD) ---
 st.markdown("---")
 st.subheader("📝 Atualizar Progresso")
+st.caption("As alterações abaixo só serão salvas quando clicar em 'Confirmar Alterações'.")
 
 filtro = st.selectbox("Filtrar Matéria:", ["TODAS"] + list(df["Disciplina"].unique()))
 
 if filtro != "TODAS":
-    df_show = df[df["Disciplina"] == filtro]
+    df_show = df[df["Disciplina"] == filtro].reset_index(drop=True)
 else:
-    df_show = df
+    df_show = df.reset_index(drop=True)
 
-# Tabela Editável
-edited_df = st.data_editor(
-    df_show,
-    column_config={
-        "Disciplina": st.column_config.TextColumn(disabled=True),
-        "Tópico": st.column_config.TextColumn(disabled=True),
-        "PDF Fechado": st.column_config.CheckboxColumn("PDF OK?", width="small"),
-        "Revisões": st.column_config.NumberColumn("Nº Rev.", step=1, min_value=0)
-    },
-    hide_index=True, use_container_width=True, num_rows="fixed"
-)
-
-# --- LÓGICA DE SALVAMENTO DE ESTADO ---
-# Se o usuário editou a tabela, precisamos atualizar a memória principal
-if not edited_df.equals(df_show):
-    if filtro == "TODAS":
-        st.session_state["df_memory"] = edited_df
-    else:
-        # Atualização cirúrgica (apenas nas linhas filtradas)
-        # Primeiro, removemos as linhas antigas dessa matéria
-        base_sem_filtro = st.session_state["df_memory"][st.session_state["df_memory"]["Disciplina"] != filtro]
-        # Concatenamos com as linhas editadas
-        st.session_state["df_memory"] = pd.concat([base_sem_filtro, edited_df], ignore_index=True)
+# *** O SEGREDO ESTÁ AQUI: st.form ***
+with st.form("my_form"):
+    edited_df = st.data_editor(
+        df_show,
+        column_config={
+            "Disciplina": st.column_config.TextColumn(disabled=True),
+            "Tópico": st.column_config.TextColumn(disabled=True),
+            "PDF Fechado": st.column_config.CheckboxColumn("PDF OK?", width="small"),
+            "Revisões": st.column_config.NumberColumn(
+                "Nº Rev.", 
+                step=1, 
+                min_value=0, 
+                help="Clique na seta para aumentar"
+            )
+        },
+        hide_index=True, 
+        use_container_width=True, 
+        num_rows="fixed",
+        key="editor_data"
+    )
     
-    st.rerun() # Atualiza a tela instantaneamente
+    # Botão de Envio do Formulário
+    submitted = st.form_submit_button("✅ Confirmar Alterações", type="primary")
 
-# --- BOTÃO DE DOWNLOAD (SALVAR) ---
-st.markdown("###")
-st.success("Não esqueça de baixar seu arquivo atualizado ao final do estudo!")
+    if submitted:
+        # Lógica de Atualização
+        if filtro == "TODAS":
+            st.session_state["df_memory"] = edited_df
+        else:
+            # Pega o DF original (memória)
+            df_full = st.session_state["df_memory"]
+            # Remove as linhas da matéria que estamos editando
+            df_others = df_full[df_full["Disciplina"] != filtro]
+            # Junta as outras com as editadas agora
+            st.session_state["df_memory"] = pd.concat([df_others, edited_df], ignore_index=True)
+        
+        st.rerun()
 
+# --- DOWNLOAD ---
+st.markdown("---")
 csv = st.session_state["df_memory"].to_csv(index=False).encode('utf-8')
 
 st.download_button(
-    label="💾 BAIXAR ARQUIVO ATUALIZADO (Salvar)",
+    label="💾 BAIXAR ARQUIVO PARA SALVAR",
     data=csv,
     file_name='meu_progresso_fiscal.csv',
     mime='text/csv',
-    type="primary",
+    type="secondary",
     use_container_width=True
 )
