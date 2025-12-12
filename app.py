@@ -1,15 +1,28 @@
 import streamlit as st
 import pandas as pd
-from streamlit_gsheets import GSheetsConnection
 import plotly.express as px
+from streamlit_gsheets import GSheetsConnection
 
-# --- CONFIGURAÇÃO DA PÁGINA (OTIMIZADA PARA MOBILE) ---
-st.set_page_config(page_title="Fiscal Tracker", layout="wide", page_icon="⚖️")
+# --- CONFIGURAÇÃO DE DESIGN ---
+st.set_page_config(page_title="Fiscal Command Center", layout="wide", page_icon="🚀")
 
-# --- CONEXÃO COM GOOGLE SHEETS ---
+# Ajuste CSS para remover cara de "documento" e deixar mais "app"
+st.markdown("""
+<style>
+    .stMetric {
+        background-color: #f0f2f6;
+        padding: 15px;
+        border-radius: 10px;
+        border-left: 5px solid #ff4b4b;
+    }
+    [data-testid="stHeader"] {background-color: rgba(0,0,0,0);}
+</style>
+""", unsafe_allow_html=True)
+
+# --- CONEXÃO ---
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# --- DADOS DO EDITAL (BASE DE DADOS INICIAL) ---
+# --- DADOS INICIAIS ---
 def get_initial_data():
     structure = {
         "Direito Tributário": ["Sistema Tributário Nacional", "Competência Tributária", "Limitações ao Poder de Tributar", "Impostos em Espécie", "Obrigação Tributária", "Crédito Tributário", "Suspensão/Extinção/Exclusão", "Administração Tributária"],
@@ -27,101 +40,110 @@ def get_initial_data():
             rows.append({
                 "Disciplina": materia,
                 "Tópico": topico,
-                "Status": "Não Iniciado",
-                "Revisões": 0,
-                "Acertos": 0,
-                "Questões Totais": 0,
-                "% Acerto": 0.0
+                "PDF Fechado": False,  # Checkbox simples
+                "Total Revisões": 0,   # Contador simples
             })
     return pd.DataFrame(rows)
 
-# --- CARREGAR DADOS ---
-st.title("📱 Fiscal Tracker - iPad Edition")
-
+# --- CARREGAMENTO ---
 try:
-    # Tenta ler a planilha. Se estiver vazia ou der erro, carrega o padrão
-    df = conn.read(worksheet="Página1", ttl=0) # ttl=0 evita cache antigo
-    if df.empty or "Disciplina" not in df.columns:
+    df = conn.read(worksheet="Página1", ttl=0)
+    # Verifica se tem as colunas novas, senão reseta
+    if df.empty or "PDF Fechado" not in df.columns:
         df = get_initial_data()
 except:
     df = get_initial_data()
 
-# --- DASHBOARD RÁPIDO (TOPO) ---
-st.caption("Visão Geral do Ciclo Básico")
-col1, col2, col3 = st.columns(3)
-total_topicos = len(df)
-concluidos = len(df[df["Status"] == "Finalizado"])
-em_andamento = len(df[df["Status"] == "Em Estudo"])
+# Garantir tipos corretos
+df["PDF Fechado"] = df["PDF Fechado"].astype(bool)
+df["Total Revisões"] = df["Total Revisões"].fillna(0).astype(int)
 
-col1.metric("Progresso", f"{round((concluidos/total_topicos)*100)}%")
-col2.metric("Finalizados", concluidos)
-col3.metric("Estudando", em_andamento)
-
-with st.expander("📊 Ver Gráfico de Evolução"):
-    progresso_por_materia = df[df["Status"] == "Finalizado"].groupby("Disciplina").size()
-    total_por_materia = df.groupby("Disciplina").size()
-    evolucao = (progresso_por_materia / total_por_materia * 100).fillna(0).reset_index(name="Progresso")
-    fig = px.bar(evolucao, x="Progresso", y="Disciplina", orientation='h', text_auto='.0f')
-    fig.update_layout(xaxis_range=[0, 100], margin=dict(l=0, r=0, t=0, b=0))
-    st.plotly_chart(fig, use_container_width=True)
-
-# --- ÁREA DE ESTUDO (TABELA EDITÁVEL) ---
+# --- CABEÇALHO ---
+st.title("🚀 Painel de Controle - Auditor Fiscal")
 st.markdown("---")
-st.subheader("📝 Registro de Estudos")
 
-# Filtro por matéria para não poluir a tela do iPad
-materia_filtro = st.selectbox("Filtrar Disciplina:", ["TODAS"] + list(df["Disciplina"].unique()))
+# --- BLOCO 1: KPI CARDS (VISUAL DE DASHBOARD) ---
+pdfs_concluidos = df["PDF Fechado"].sum()
+total_pdfs = len(df)
+total_revisoes = df["Total Revisões"].sum()
+progresso_geral = (pdfs_concluidos / total_pdfs) * 100
 
-if materia_filtro != "TODAS":
-    df_show = df[df["Disciplina"] == materia_filtro]
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("PDFs Fechados", f"{pdfs_concluidos}/{total_pdfs}", border=True)
+col2.metric("Progresso Edital", f"{progresso_geral:.1f}%", border=True)
+col3.metric("Total Revisões Acumuladas", f"{total_revisoes} 🔄", border=True)
+
+# Cálculo da matéria mais forte
+materia_forte = df[df["PDF Fechado"]==True]["Disciplina"].mode()
+materia_forte_nome = materia_forte[0] if not materia_forte.empty else "Nenhuma"
+col4.metric("Foco Principal Atual", materia_forte_nome, border=True)
+
+# --- BLOCO 2: VISUALIZAÇÃO GRÁFICA (SUNBURST) ---
+# Este gráfico foge totalmente do padrão Notion
+st.subheader("🔭 Radar de Cobertura do Edital")
+
+# Criando coluna de cor baseada no status
+df["Cor"] = df["PDF Fechado"].map({True: 1, False: 0})
+
+fig = px.sunburst(
+    df, 
+    path=['Disciplina', 'Tópico'], 
+    values=[1]*len(df), # Tamanho igual para todos
+    color='PDF Fechado',
+    color_discrete_map={True: '#00CC96', False: '#EF553B'}, # Verde e Vermelho
+    title="Mapa de Calor (Vermelho = Pendente | Verde = Fechado)"
+)
+fig.update_layout(height=500, margin=dict(t=30, l=0, r=0, b=0))
+st.plotly_chart(fig, use_container_width=True)
+
+# --- BLOCO 3: INPUT DE DADOS (SIMPLIFICADO) ---
+st.markdown("---")
+st.subheader("🎛️ Console de Atualização")
+
+# Filtro
+lista_materias = ["TODAS AS MATÉRIAS"] + list(df["Disciplina"].unique())
+filtro = st.selectbox("Selecione o Bloco de Estudo:", lista_materias)
+
+if filtro != "TODAS AS MATÉRIAS":
+    df_show = df[df["Disciplina"] == filtro]
 else:
     df_show = df
 
-# A TABELA MÁGICA (Data Editor)
-# Permite editar direto na tela como se fosse Excel
+# TABELA DE COMANDO
 edited_df = st.data_editor(
     df_show,
     column_config={
-        "Status": st.column_config.SelectboxColumn(
-            "Status",
-            options=["Não Iniciado", "Em Estudo", "Resumo Feito", "Finalizado"],
-            required=True,
-            width="medium"
+        "Disciplina": st.column_config.TextColumn("Matéria", disabled=True),
+        "Tópico": st.column_config.TextColumn("Assunto", disabled=True),
+        "PDF Fechado": st.column_config.CheckboxColumn(
+            "PDF Finalizado?",
+            help="Marque se você já matou a teoria desse PDF",
+            default=False
         ),
-        "% Acerto": st.column_config.ProgressColumn(
-            "Desempenho",
-            format="%.1f%%",
+        "Total Revisões": st.column_config.NumberColumn(
+            "Nº Revisões",
+            help="Quantas vezes você já voltou neste assunto?",
             min_value=0,
-            max_value=100,
-        ),
-        "Revisões": st.column_config.NumberColumn("Rev.", min_value=0, step=1),
-        "Acertos": st.column_config.NumberColumn("Acertos", min_value=0),
-        "Questões Totais": st.column_config.NumberColumn("Q. Totais", min_value=0),
+            step=1,
+            format="%d 🔄"
+        )
     },
     hide_index=True,
     use_container_width=True,
     num_rows="fixed",
-    key="editor"
+    key="editor_dashboard"
 )
 
-# --- BOTÃO DE SALVAR ---
-# Lógica para recalcular % e salvar na nuvem
-if st.button("💾 Salvar Alterações na Nuvem", type="primary", use_container_width=True):
-    # Atualiza o dataframe original com as edições feitas na tela
-    if materia_filtro != "TODAS":
-        # Se estava filtrado, atualizamos apenas as linhas correspondentes
+# --- SALVAR ---
+st.markdown("###")
+col_save, _ = st.columns([1, 4])
+if col_save.button("💾 GRAVAR DADOS NA NUVEM", type="primary", use_container_width=True):
+    if filtro != "TODAS AS MATÉRIAS":
         df.update(edited_df)
         df_final = df.copy()
     else:
         df_final = edited_df.copy()
     
-    # Recalcula a porcentagem de acertos
-    df_final["% Acerto"] = df_final.apply(
-        lambda x: (x["Acertos"] / x["Questões Totais"] * 100) if x["Questões Totais"] > 0 else 0, 
-        axis=1
-    )
-    
-    # Envia para o Google Sheets
     conn.update(worksheet="Página1", data=df_final)
-    st.success("Sincronizado com sucesso! Pode fechar.")
+    st.toast("✅ Banco de dados atualizado com sucesso!", icon="💾")
     st.rerun()
