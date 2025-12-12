@@ -1,7 +1,19 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+# --- ADICIONE ESTE BLOCO NO TOPO DO SEU app.py ---
+# Coloque o link do ícone que você deseja. Este é o que eu gerei.
+ICON_URL = "https://github.com/r7araujo/study/blob/main/Gemini_Generated_Image_jlne3njlne3njlne.png" 
 
+st.markdown(
+    f"""
+    <link rel="apple-touch-icon" href="{ICON_URL}">
+    <link rel="apple-touch-icon-precomposed" href="{ICON_URL}">
+    <meta name="apple-mobile-web-app-title" content="Fiscal Tracker">
+    """, 
+    unsafe_allow_html=True
+)
+# ----------------------------------------------------
 # --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="Fiscal Tracker", layout="wide", page_icon="📊")
 
@@ -169,3 +181,4 @@ with st.form("my_form"):
 st.markdown("---")
 csv = st.session_state["df_memory"].to_csv(index=False).encode('utf-8')
 st.download_button("💾 BAIXAR ARQUIVO (Salvar Progresso)", data=csv, file_name='progresso_auditor.csv', mime='text/csv', type="secondary", use_container_width=True)
+
