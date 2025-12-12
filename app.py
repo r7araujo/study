@@ -5,9 +5,8 @@ import plotly.express as px
 # --- CONFIGURAÇÃO ---
 st.set_page_config(page_title="Fiscal Tracker", layout="wide", page_icon="📊")
 
-# --- FUNÇÃO: GERAR DADOS COM NUMERAÇÃO CORRETA ---
+# --- FUNÇÃO: DADOS INICIAIS (AULA 00 a XX) ---
 def get_initial_data():
-    # Limites exatos solicitados
     limits = {
         "Contabilidade Geral": 32,
         "Direito Administrativo": 16,
@@ -20,9 +19,7 @@ def get_initial_data():
     
     rows = []
     for materia, max_num in limits.items():
-        # Gera de 0 até o número limite (inclusive)
         for i in range(max_num + 1):
-            # Formata como "Aula 00", "Aula 01"...
             nome_topico = f"Aula {i:02d}"
             rows.append({
                 "Disciplina": materia,
@@ -32,23 +29,20 @@ def get_initial_data():
             })
     return pd.DataFrame(rows)
 
-# --- GERENCIAMENTO DE ESTADO ---
-# Se não existir dados na memória, carrega o inicial
+# --- MEMÓRIA ---
 if "df_memory" not in st.session_state:
     st.session_state["df_memory"] = get_initial_data()
 
 # --- BARRA LATERAL ---
 st.sidebar.header("📂 Gerenciamento")
+uploaded_file = st.sidebar.file_uploader("Carregar CSV Salvo", type="csv")
 
-# 1. Carregar Arquivo
-uploaded_file = st.sidebar.file_uploader("Carregar Progresso Salvo (CSV)", type="csv")
 if uploaded_file is not None:
     try:
         df_temp = pd.read_csv(uploaded_file)
         df_temp["PDF Fechado"] = df_temp["PDF Fechado"].astype(bool)
         df_temp["Revisões"] = df_temp["Revisões"].fillna(0).astype(int)
         
-        # Verifica se o arquivo carregado é diferente da memória atual
         if not df_temp.equals(st.session_state["df_memory"]):
             st.session_state["df_memory"] = df_temp
             st.rerun()
@@ -56,10 +50,7 @@ if uploaded_file is not None:
         st.error("Arquivo inválido.")
 
 st.sidebar.markdown("---")
-
-# 2. BOTÃO DE EMERGÊNCIA (RESET)
-# Use isso se estiver aparecendo os nomes antigos dos tópicos
-if st.sidebar.button("⚠️ RESETAR BANCO DE DADOS", help="Apaga tudo e recria com as Aulas 00-XX", type="primary"):
+if st.sidebar.button("⚠️ RESETAR BANCO DE DADOS", type="primary"):
     st.session_state["df_memory"] = get_initial_data()
     st.rerun()
 
@@ -73,88 +64,87 @@ total_pdfs = len(df)
 total_revisoes = df["Revisões"].sum()
 progresso = (pdfs_concluidos / total_pdfs) * 100 if total_pdfs > 0 else 0
 
+# KPIs
 c1, c2, c3 = st.columns(3)
 c1.metric("Aulas Fechadas", f"{pdfs_concluidos}/{total_pdfs}", border=True)
 c2.metric("Progresso Total", f"{progresso:.1f}%", border=True)
 c3.metric("Total Revisões", f"{total_revisoes}", border=True)
 
-# --- ÁREA DE ANÁLISE (PIZZA + BARRAS) ---
+# --- NOVO: GRÁFICO GERAL DE REVISÕES (NO TOPO) ---
 st.markdown("---")
-st.subheader("🔎 Análise por Disciplina")
+st.subheader("🏆 Comparativo Geral de Revisões")
+
+if not df.empty:
+    # Agrupa somando as revisões de cada matéria
+    df_geral = df.groupby("Disciplina")["Revisões"].sum().reset_index().sort_values("Revisões", ascending=False)
+    
+    fig_geral = px.bar(
+        df_geral,
+        x="Disciplina",
+        y="Revisões",
+        color="Disciplina", # Cada barra uma cor
+        text="Revisões",    # Mostra o número em cima da barra
+        title="Qual matéria estou revisando mais?"
+    )
+    
+    fig_geral.update_layout(height=400)
+    fig_geral.update_traces(textposition="outside") # Número fora da barra para leitura fácil
+    
+    st.plotly_chart(fig_geral, use_container_width=True)
+
+# --- ÁREA DE ANÁLISE DETALHADA (PIZZA + AULAS) ---
+st.markdown("---")
+st.subheader("🔎 Visão Detalhada por Disciplina")
 
 if not df.empty:
     lista_disciplinas = sorted(df["Disciplina"].unique())
-    
-    # Seletor de Matéria
     materia_foco = st.selectbox("Selecione a Disciplina:", lista_disciplinas)
     
-    # Filtra dados apenas dessa matéria
+    # Filtra dados
     df_foco = df[df["Disciplina"] == materia_foco].copy()
     
     col_g1, col_g2 = st.columns(2)
     
-    # --- GRÁFICO 1: PIZZA (DONUT) DE PROGRESSO ---
+    # Pizza (Progresso)
     with col_g1:
         st.markdown(f"**🔭 Progresso: {materia_foco}**")
-        
         concluido = df_foco["PDF Fechado"].sum()
         pendente = len(df_foco) - concluido
         
-        # Dados para o gráfico
-        dados_pizza = pd.DataFrame({
-            "Status": ["Concluído", "Pendente"],
-            "Quantidade": [concluido, pendente]
-        })
-        
-        # Gráfico Donut
         fig_pizza = px.pie(
-            dados_pizza, 
-            values="Quantidade", 
-            names="Status",
-            hole=0.5, # Faz o furo no meio
-            color="Status",
-            color_discrete_map={"Concluído": "#00CC96", "Pendente": "#EF553B"}
+            values=[concluido, pendente], 
+            names=["Concluído", "Pendente"],
+            hole=0.5,
+            color_discrete_sequence=["#00CC96", "#EF553B"]
         )
-        
-        # Visual clean
-        fig_pizza.update_traces(textinfo='percent+label', textfont_size=14)
+        fig_pizza.update_traces(textinfo='percent+label')
         fig_pizza.update_layout(showlegend=False, margin=dict(t=10, b=10, l=10, r=10), height=350)
-        
         st.plotly_chart(fig_pizza, use_container_width=True)
 
-    # --- GRÁFICO 2: BARRAS DE REVISÃO (AULA 00 a XX) ---
+    # Barras (Revisões por Aula)
     with col_g2:
-        st.markdown(f"**🔄 Revisões por Aula**")
-        
+        st.markdown(f"**🔄 Revisões por Aula ({materia_foco})**")
         fig_rev = px.bar(
             df_foco,
-            y="Tópico", # Aula 00, Aula 01...
+            y="Tópico",
             x="Revisões",
             orientation='h',
             text_auto=True,
             color="Revisões",
             color_continuous_scale="Blues"
         )
-        
-        # Altura dinâmica para caber todas as aulas (evita espremer)
-        altura_dinamica = max(400, len(df_foco) * 25)
-        
         fig_rev.update_layout(
-            yaxis_title=None,
-            xaxis_title="Qtd Revisões",
+            yaxis_title=None, xaxis_title="Qtd Revisões",
             margin=dict(t=0, l=0, r=0, b=0),
-            height=altura_dinamica
+            height=max(400, len(df_foco) * 25),
+            yaxis={'autorange': "reversed"}
         )
-        # Inverte o eixo Y para Aula 00 ficar no topo
-        fig_rev['layout']['yaxis']['autorange'] = "reversed"
-        
         st.plotly_chart(fig_rev, use_container_width=True)
 
-# --- ÁREA DE EDIÇÃO (FORMULÁRIO) ---
+# --- ÁREA DE EDIÇÃO ---
 st.markdown("---")
-st.subheader(f"📝 Marcar Aulas: {materia_foco}")
+st.subheader(f"📝 Editar: {materia_foco}")
 
-# Mostra apenas a matéria selecionada no gráfico
 df_show = df[df["Disciplina"] == materia_foco].reset_index(drop=True)
 
 with st.form("my_form"):
@@ -166,34 +156,16 @@ with st.form("my_form"):
             "PDF Fechado": st.column_config.CheckboxColumn("Concluído?", width="small"),
             "Revisões": st.column_config.NumberColumn("Nº Rev.", step=1, min_value=0)
         },
-        hide_index=True, 
-        use_container_width=True, 
-        num_rows="fixed"
+        hide_index=True, use_container_width=True, num_rows="fixed"
     )
     
-    submitted = st.form_submit_button("✅ Confirmar Alterações", type="primary")
-
-    if submitted:
-        # Atualiza o banco de dados principal com as alterações feitas na matéria filtrada
+    if st.form_submit_button("✅ Confirmar Alterações", type="primary"):
         df_full = st.session_state["df_memory"]
-        
-        # Remove as linhas antigas dessa matéria
         df_others = df_full[df_full["Disciplina"] != materia_foco]
-        
-        # Adiciona as linhas novas editadas
         st.session_state["df_memory"] = pd.concat([df_others, edited_df], ignore_index=True)
         st.rerun()
 
 # --- DOWNLOAD ---
 st.markdown("---")
-# Gera o CSV para salvar
 csv = st.session_state["df_memory"].to_csv(index=False).encode('utf-8')
-
-st.download_button(
-    label="💾 BAIXAR ARQUIVO (Salvar Progresso)",
-    data=csv,
-    file_name='progresso_auditor_aulas.csv',
-    mime='text/csv',
-    type="secondary",
-    use_container_width=True
-)
+st.download_button("💾 BAIXAR ARQUIVO (Salvar Progresso)", data=csv, file_name='progresso_auditor.csv', mime='text/csv', type="secondary", use_container_width=True)
