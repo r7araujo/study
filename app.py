@@ -41,7 +41,6 @@ if uploaded_file is not None:
         df_temp["PDF Fechado"] = df_temp["PDF Fechado"].astype(bool)
         df_temp["Revisões"] = df_temp["Revisões"].fillna(0).astype(int)
         
-        # Só atualiza se for diferente (evita loop)
         if not df_temp.equals(st.session_state["df_memory"]):
             st.session_state["df_memory"] = df_temp
             st.rerun()
@@ -53,8 +52,6 @@ st.sidebar.header("➕ Adicionar Conteúdo")
 
 with st.sidebar.expander("Novo Tópico ou Matéria"):
     tipo_add = st.radio("Tipo:", ["Tópico em Matéria Existente", "Nova Matéria Completa"])
-    
-    # Pega lista atualizada de disciplinas
     disciplinas_atuais = st.session_state["df_memory"]["Disciplina"].unique()
     
     disciplina_input = ""
@@ -77,13 +74,11 @@ with st.sidebar.expander("Novo Tópico ou Matéria"):
             st.success(f"Adicionado: {topico_input}")
             st.rerun()
 
-# Pega o DF da memória para exibir
 df = st.session_state["df_memory"]
 
 # --- CABEÇALHO ---
 st.title("🚀 Painel de Controle - Auditor Fiscal")
 
-# --- KPIs ---
 pdfs_concluidos = df["PDF Fechado"].sum()
 total_pdfs = len(df)
 total_revisoes = df["Revisões"].sum()
@@ -94,21 +89,41 @@ c1.metric("PDFs Fechados", f"{pdfs_concluidos}/{total_pdfs}", border=True)
 c2.metric("Progresso Total", f"{progresso:.1f}%", border=True)
 c3.metric("Total Revisões", f"{total_revisoes}", border=True)
 
-# --- GRÁFICO ---
+# --- ÁREA DE GRÁFICOS (ALTERADA) ---
+st.markdown("---")
 if not df.empty:
-    with st.expander("Ver Gráfico de Radar (Sunburst)", expanded=True):
-        fig = px.sunburst(
+    col_graph1, col_graph2 = st.columns(2)
+    
+    # Gráfico 1: Cobertura (O que já fechei?)
+    with col_graph1:
+        st.subheader("🔭 Cobertura (PDFs)")
+        fig1 = px.sunburst(
             df, path=['Disciplina', 'Tópico'], values=[1]*len(df),
             color='PDF Fechado', color_discrete_map={True: '#00CC96', False: '#EF553B'},
-            title="Vermelho = Pendente | Verde = Concluído"
         )
-        fig.update_layout(height=400, margin=dict(t=30, l=0, r=0, b=0))
-        st.plotly_chart(fig, use_container_width=True)
+        fig1.update_layout(margin=dict(t=10, l=10, r=10, b=10), height=350)
+        st.plotly_chart(fig1, use_container_width=True)
 
-# --- ÁREA DE EDIÇÃO (FORMULÁRIO PARA EVITAR RELOAD) ---
+    # Gráfico 2: Análise de Revisões (NOVO)
+    with col_graph2:
+        st.subheader("🔄 Volume de Revisões")
+        # Agrupa somando as revisões por disciplina
+        rev_por_materia = df.groupby("Disciplina")["Revisões"].sum().reset_index()
+        
+        fig2 = px.bar(
+            rev_por_materia, 
+            x="Disciplina", 
+            y="Revisões", 
+            color="Disciplina",
+            text_auto=True, # Mostra o número em cima da barra
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig2.update_layout(showlegend=False, margin=dict(t=10, l=10, r=10, b=10), height=350)
+        st.plotly_chart(fig2, use_container_width=True)
+
+# --- ÁREA DE EDIÇÃO (FORMULÁRIO) ---
 st.markdown("---")
 st.subheader("📝 Atualizar Progresso")
-st.caption("As alterações abaixo só serão salvas quando clicar em 'Confirmar Alterações'.")
 
 filtro = st.selectbox("Filtrar Matéria:", ["TODAS"] + list(df["Disciplina"].unique()))
 
@@ -117,7 +132,6 @@ if filtro != "TODAS":
 else:
     df_show = df.reset_index(drop=True)
 
-# *** O SEGREDO ESTÁ AQUI: st.form ***
 with st.form("my_form"):
     edited_df = st.data_editor(
         df_show,
@@ -129,30 +143,22 @@ with st.form("my_form"):
                 "Nº Rev.", 
                 step=1, 
                 min_value=0, 
-                help="Clique na seta para aumentar"
             )
         },
         hide_index=True, 
         use_container_width=True, 
-        num_rows="fixed",
-        key="editor_data"
+        num_rows="fixed"
     )
     
-    # Botão de Envio do Formulário
     submitted = st.form_submit_button("✅ Confirmar Alterações", type="primary")
 
     if submitted:
-        # Lógica de Atualização
         if filtro == "TODAS":
             st.session_state["df_memory"] = edited_df
         else:
-            # Pega o DF original (memória)
             df_full = st.session_state["df_memory"]
-            # Remove as linhas da matéria que estamos editando
             df_others = df_full[df_full["Disciplina"] != filtro]
-            # Junta as outras com as editadas agora
             st.session_state["df_memory"] = pd.concat([df_others, edited_df], ignore_index=True)
-        
         st.rerun()
 
 # --- DOWNLOAD ---
