@@ -12,8 +12,8 @@ ROTINA_SEMANAL = {
     "Quarta":  ["Direito Adm."],
     "Quinta":  ["Direito Civil"],
     "Sexta":   ["RLM"],
-    "Sábado":  ["Revisão / Pendências"], 
-    "Domingo": ["Descanso"]              
+    "Sábado":  ["Revisão Semanal", "Pendências"], 
+    "Domingo": ["Descanso Total"]              
 }
 
 # --- FUNÇÃO: DADOS INICIAIS ---
@@ -44,7 +44,7 @@ if "df_memory" not in st.session_state:
     st.session_state["df_memory"] = get_initial_data()
 
 # ==============================================================================
-# BARRA LATERAL (NAVEGAÇÃO E ARQUIVOS)
+# BARRA LATERAL
 # ==============================================================================
 st.sidebar.header("🧭 Navegação")
 pagina = st.sidebar.radio("Ir para:", ["📊 Painel de Estudos", "📅 Rotina Semanal"])
@@ -73,7 +73,7 @@ if st.sidebar.button("⚠️ RESETAR BANCO DE DADOS", type="primary"):
 df = st.session_state["df_memory"]
 
 # ==============================================================================
-# PÁGINA 1: PAINEL DE ESTUDOS (DASHBOARD)
+# PÁGINA 1: PAINEL DE ESTUDOS
 # ==============================================================================
 if pagina == "📊 Painel de Estudos":
     st.title("⚖️ Painel de Controle")
@@ -160,66 +160,34 @@ if pagina == "📊 Painel de Estudos":
     st.download_button("💾 BAIXAR ARQUIVO (Salvar Progresso)", data=csv, file_name='progresso_auditor.csv', mime='text/csv', type="secondary", use_container_width=True)
 
 # ==============================================================================
-# PÁGINA 2: ROTINA SEMANAL
+# PÁGINA 2: ROTINA SEMANAL (VERSÃO NATIVA)
 # ==============================================================================
 elif pagina == "📅 Rotina Semanal":
     st.title("📅 Minha Rotina Fixa")
-    st.caption("Foco e disciplina constante.")
-    
-    st.markdown("""
-    <style>
-        .rotina-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            justify_content: center;
-            margin-top: 20px;
-        }
-        .dia-card {
-            background-color: #262730;
-            border: 1px solid #41444b;
-            border-radius: 10px;
-            width: 140px;
-            padding: 15px;
-            text-align: center;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.3);
-        }
-        .dia-titulo {
-            color: #ff4b4b;
-            font-weight: bold;
-            font-size: 1.2em;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            border-bottom: 2px solid #ff4b4b;
-            padding-bottom: 5px;
-        }
-        .materia-item {
-            background-color: #0e1117;
-            color: white;
-            padding: 8px;
-            margin: 6px 0;
-            border-radius: 6px;
-            font-size: 0.95em;
-            border: 1px solid #333;
-        }
-    </style>
-    """, unsafe_allow_html=True)
+    st.caption("Disciplina é liberdade.")
+    st.markdown("---")
 
-    html_cards = '<div class="rotina-container">'
-    dias_ordem = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-    
-    for dia in dias_ordem:
-        materias = ROTINA_SEMANAL.get(dia, [])
-        itens_html = ""
-        for mat in materias:
-            itens_html += f'<div class="materia-item">{mat}</div>'
-            
-        html_cards += f"""
-        <div class="dia-card">
-            <div class="dia-titulo">{dia}</div>
-            {itens_html}
-        </div>
-        """
-    html_cards += "</div>"
+    # Função auxiliar para criar o card
+    def criar_card_dia(nome_dia, materias_lista):
+        with st.container(border=True):
+            # Título vermelho (Estilo Old School)
+            st.markdown(f"#### :red[{nome_dia}]")
+            if not materias_lista:
+                st.markdown("*Livre*")
+            else:
+                for materia in materias_lista:
+                    st.markdown(f"📚 {materia}")
 
-    st.markdown(html_cards, unsafe_allow_html=True)
+    # Layout: Linha 1 (4 dias)
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: criar_card_dia("Segunda", ROTINA_SEMANAL.get("Segunda", []))
+    with col2: criar_card_dia("Terça", ROTINA_SEMANAL.get("Terça", []))
+    with col3: criar_card_dia("Quarta", ROTINA_SEMANAL.get("Quarta", []))
+    with col4: criar_card_dia("Quinta", ROTINA_SEMANAL.get("Quinta", []))
+
+    # Layout: Linha 2 (3 dias)
+    st.markdown("###") # Espaçamento
+    col5, col6, col7 = st.columns(3)
+    with col5: criar_card_dia("Sexta", ROTINA_SEMANAL.get("Sexta", []))
+    with col6: criar_card_dia("Sábado", ROTINA_SEMANAL.get("Sábado", []))
+    with col7: criar_card_dia("Domingo", ROTINA_SEMANAL.get("Domingo", []))
