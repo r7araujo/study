@@ -52,7 +52,7 @@ st.sidebar.header("➕ Adicionar Conteúdo")
 
 with st.sidebar.expander("Novo Tópico ou Matéria"):
     tipo_add = st.radio("Tipo:", ["Tópico em Matéria Existente", "Nova Matéria Completa"])
-    disciplinas_atuais = st.session_state["df_memory"]["Disciplina"].unique()
+    disciplinas_atuais = sorted(st.session_state["df_memory"]["Disciplina"].unique())
     
     disciplina_input = ""
     if tipo_add == "Tópico em Matéria Existente":
@@ -89,43 +89,73 @@ c1.metric("PDFs Fechados", f"{pdfs_concluidos}/{total_pdfs}", border=True)
 c2.metric("Progresso Total", f"{progresso:.1f}%", border=True)
 c3.metric("Total Revisões", f"{total_revisoes}", border=True)
 
-# --- ÁREA DE GRÁFICOS (ALTERADA) ---
+# --- ÁREA DE GRÁFICOS POR DISCIPLINA (NOVA LÓGICA) ---
 st.markdown("---")
+st.subheader("📊 Análise Detalhada por Disciplina")
+
 if not df.empty:
-    col_graph1, col_graph2 = st.columns(2)
+    lista_disciplinas = sorted(df["Disciplina"].unique())
+    # O usuário escolhe UMA disciplina para focar os gráficos
+    materia_foco = st.selectbox("Selecione a Disciplina para visualizar os gráficos:", lista_disciplinas)
     
-    # Gráfico 1: Cobertura (O que já fechei?)
-    with col_graph1:
-        st.subheader("🔭 Cobertura (PDFs)")
-        fig1 = px.sunburst(
-            df, path=['Disciplina', 'Tópico'], values=[1]*len(df),
-            color='PDF Fechado', color_discrete_map={True: '#00CC96', False: '#EF553B'},
+    # Filtra os dados apenas dessa disciplina
+    df_foco = df[df["Disciplina"] == materia_foco].copy()
+    
+    # Cria duas colunas para os gráficos
+    col_g1, col_g2 = st.columns(2)
+    
+    with col_g1:
+        st.markdown(f"**🔭 Situação dos Tópicos: {materia_foco}**")
+        # Gráfico de barras horizontais: Tópico vs Status
+        # Usamos trick do Plotly: x=1 para todas as barras terem mesmo tamanho, cor define status
+        fig_prog = px.bar(
+            df_foco, 
+            y="Tópico", 
+            x=[1]*len(df_foco), 
+            color="PDF Fechado",
+            orientation='h',
+            color_discrete_map={True: '#00CC96', False: '#EF553B'}, # Verde e Vermelho
+            text="PDF Fechado", # Mostra True/False (ou podemos customizar)
+            category_orders={"Tópico": sorted(df_foco["Tópico"].tolist())} # Ordena alfabeticamente ou manter ordem
         )
-        fig1.update_layout(margin=dict(t=10, l=10, r=10, b=10), height=350)
-        st.plotly_chart(fig1, use_container_width=True)
-
-    # Gráfico 2: Análise de Revisões (NOVO)
-    with col_graph2:
-        st.subheader("🔄 Volume de Revisões")
-        # Agrupa somando as revisões por disciplina
-        rev_por_materia = df.groupby("Disciplina")["Revisões"].sum().reset_index()
-        
-        fig2 = px.bar(
-            rev_por_materia, 
-            x="Disciplina", 
-            y="Revisões", 
-            color="Disciplina",
-            text_auto=True, # Mostra o número em cima da barra
-            color_discrete_sequence=px.colors.qualitative.Pastel
+        # Limpeza visual do gráfico
+        fig_prog.update_traces(texttemplate="%{y}", textposition="inside", insidetextanchor="start")
+        fig_prog.update_yaxes(visible=False, showticklabels=False) # Esconde eixo Y pois o texto já está na barra
+        fig_prog.update_xaxes(visible=False)
+        fig_prog.update_layout(
+            showlegend=True, 
+            legend_title="PDF Finalizado?",
+            margin=dict(t=0, l=0, r=0, b=0), 
+            height=max(400, len(df_foco) * 25) # Altura dinâmica baseada no número de tópicos
         )
-        fig2.update_layout(showlegend=False, margin=dict(t=10, l=10, r=10, b=10), height=350)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig_prog, use_container_width=True)
+        st.caption("Verde = Concluído | Vermelho = Pendente")
 
-# --- ÁREA DE EDIÇÃO (FORMULÁRIO) ---
+    with col_g2:
+        st.markdown(f"**🔄 Quantidade de Revisões por Assunto**")
+        # Gráfico de barras: Quantas revisões em CADA tópico
+        fig_rev = px.bar(
+            df_foco,
+            y="Tópico",
+            x="Revisões",
+            orientation='h',
+            text_auto=True,
+            color="Revisões",
+            color_continuous_scale="Blues"
+        )
+        fig_rev.update_layout(
+            yaxis_title=None,
+            xaxis_title="Nº de Revisões",
+            margin=dict(t=0, l=0, r=0, b=0),
+            height=max(400, len(df_foco) * 25) # Mesma altura dinâmica
+        )
+        st.plotly_chart(fig_rev, use_container_width=True)
+
+# --- ÁREA DE EDIÇÃO ---
 st.markdown("---")
-st.subheader("📝 Atualizar Progresso")
+st.subheader("📝 Atualizar e Estudar")
 
-filtro = st.selectbox("Filtrar Matéria:", ["TODAS"] + list(df["Disciplina"].unique()))
+filtro = st.selectbox("Filtrar Tabela para Edição:", ["TODAS"] + lista_disciplinas)
 
 if filtro != "TODAS":
     df_show = df[df["Disciplina"] == filtro].reset_index(drop=True)
