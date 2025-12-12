@@ -1,5 +1,5 @@
 streamlit
 pandas
 plotly
-streamlit-gsheets
-numpy<2.0.0
+st-gsheets-connection
+numpy<2
